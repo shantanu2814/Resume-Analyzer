@@ -1,42 +1,29 @@
+import os
 from openai import OpenAI
 from schema import ResumeEvaluation
 from embeddings import calculate_cosine_similarity, extract_text_from_pdf
 
-client = OpenAI()
+# Initialize client pointing to xAI's endpoint
+client = OpenAI(
+    api_key=os.getenv("XAI_API_KEY"),
+    base_url="https://api.x.ai/v1"
+)
 
 def analyze_resume(pdf_path: str, job_description: str) -> ResumeEvaluation:
-    # 1. Parse text from PDF
     resume_text = extract_text_from_pdf(pdf_path)
-    
-    # 2. Calculate baseline semantic similarity score
     semantic_match = calculate_cosine_similarity(resume_text, job_description)
-    
-    # 3. System Prompt specifying recruiter role and guidelines
-    system_prompt = """
-    You are an expert Technical Recruiter and ATS Optimization Assistant.
-    Analyze the provided Resume against the target Job Description.
-    Evaluate technical skills, experience alignment, and metric impact.
-    Provide actionable feedback with concrete bullet point rewrites.
-    """
-    
-    user_prompt = f"""
-    [JOB DESCRIPTION]
-    {job_description}
 
-    [RESUME TEXT]
-    {resume_text}
-
-    Semantic Similarity Baseline: {round(semantic_match * 100, 2)}%
-    
-    Please evaluate the resume and output strict structured analysis matching the requested schema.
-    """
-
-    # 4. Enforce Pydantic schema using Structured Outputs
     completion = client.beta.chat.completions.parse(
-        model="gpt-4o",
+        model=os.getenv("LLM_MODEL", "grok-2"),
         messages=[
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": user_prompt}
+            {
+                "role": "system", 
+                "content": "You are a Senior Recruiter. Analyze resumes strictly and give structured feedback."
+            },
+            {
+                "role": "user", 
+                "content": f"Job Description:\n{job_description}\n\nResume:\n{resume_text}"
+            }
         ],
         response_format=ResumeEvaluation,
     )
